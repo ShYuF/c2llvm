@@ -86,7 +86,7 @@ class Lexer:
             "+": "plus",
             "-": "minus",
             "*": "times",
-            "/": "slash",
+            "/": "divide",
             "%": "percent",
             "++": "plusplus",
             "--": "minusminus",
@@ -130,7 +130,7 @@ class Lexer:
     def code(self):
         return self._code
 
-    def tokenize(self, code):
+    def tokenize(self, code, tupleization=False):
         try:
             assert isinstance(code, str)
             self._code = code
@@ -146,6 +146,10 @@ class Lexer:
                         f"Falied to tokenize at line {self._line}, column {self._column}: {e}"
                     )
                     sys.exit(1)
+            
+            if tupleization:
+                for i in range(len(self._tokens)):
+                    self._tokens[i] = self._tokens[i].tupleization()
         except Exception as e:
             print(f"Failed to tokenize: {e}")
             sys.exit(1)
@@ -252,7 +256,7 @@ class Lexer:
                     self._index += 1
                 self._tokens.append(
                     Token(
-                        "float",
+                        "number",
                         float(self._code[start : self._index]),
                         self._line,
                         self._column,
@@ -261,7 +265,7 @@ class Lexer:
             else:
                 self._tokens.append(
                     Token(
-                        "int",
+                        "number",
                         int(self._code[start : self._index]),
                         self._line,
                         self._column,
@@ -335,6 +339,8 @@ class Lexer:
             start = self._index
             self._index += 1
             while self._index < len(self._code) and self._code[self._index] != ">":
+                if self._code[self._index] == "\n":
+                    raise Exception("Invalid header")
                 self._index += 1
             if self._index == len(self._code):
                 raise Exception("Invalid header")

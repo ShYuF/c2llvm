@@ -25,7 +25,8 @@ int main() {
 
     if (flag == 1) {
         printf("True");
-    } else {
+    }
+    if (flag == 0) {
         printf("False");
     }
 
