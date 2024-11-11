@@ -77,6 +77,9 @@ class Lexer:
             "continue": "continue",
             "#include": "include",
             "#define": "define",
+            "stdin": "stdin",
+            "stdout": "stdout",
+            "stderr": "stderr",
         }
 
         self._punctuators = {
@@ -237,7 +240,7 @@ class Lexer:
 
     def _tokenize_number(self):
         # 处理数字
-        if self._index < len(self._code) and (self._code[self._index].isdigit():
+        if self._index < len(self._code) and self._code[self._index].isdigit():
             start = self._index
             while self._index < len(self._code) and self._code[self._index].isdigit():
                 self._index += 1
@@ -382,7 +385,7 @@ if __name__ == "__main__":
 
 int main() {
     int integer = -123.456;
-    char _charactor = 'a';
+    char _charactor = '\\b';
     printf("Hello, world!");
     return 0;
 }
