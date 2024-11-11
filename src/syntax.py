@@ -118,6 +118,15 @@ rules = {
                 "lparen",
                 "LINER_CODDITION",
                 "rparen",
+                "RESULT",
+                "else",
+                "RESULT"
+            ],
+            [
+                "if",
+                "lparen",
+                "LINER_CODDITION",
+                "rparen",
                 "RESULT"
             ],
         ]
