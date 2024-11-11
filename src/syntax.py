@@ -575,5 +575,6 @@ helper = {
     "RETURN_STMT": "返回语句",
     "LINER_CODDITION": "线性条件",
     "BIT_OP": "位运算符",
-    "NUMBER": "数字"
+    "NUMBER": "数字",
+    "ARRAY_ITEM": "数组项"
 }
