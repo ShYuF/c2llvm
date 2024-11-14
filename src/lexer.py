@@ -1,5 +1,5 @@
 # C语言词法分析器
-
+# /src/lexer.py
 import sys
 
 

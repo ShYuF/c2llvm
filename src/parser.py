@@ -1,8 +1,9 @@
-import os
+# /src/parser.py
 
+import os
 import lexer
 import syntax
-
+import json
 class Parser:
     """
     LR(1)语法分析器
@@ -37,7 +38,6 @@ class Parser:
         except Exception as e:
             print(f"Error occurred when initializing parser: {e}")
             exit(1)
-    
     def _self_check(self) -> tuple[bool, str]:
         """
         自检
@@ -75,7 +75,8 @@ class Parser:
         lr1_signs = set()  # LR(1)文法符号集（Vn ∪ Vt）
         lr1_signs.add("ENTRY")
         lr1_signs.add(self._lr1_end)
-        lr1_sign_name["ENTRY"] = ""
+        lr1_sign_name["ENTRY"] = ""  # 保持 ENTRY 的类型名称为空
+
         for key in self._rules.keys():
             lr1_signs.add(key)
             for rule in self._rules[key]["rules"]:
@@ -85,7 +86,7 @@ class Parser:
         lr1_rules.append(["ENTRY", [self._entry]])
         self._entry = "ENTRY"
         for key in self._rules.keys():
-            lr1_sign_name[key] = self._rules[key]["name"]
+            lr1_sign_name[key] = self._rules[key]["name"] or key  # 确保名称不为空
             for rule in self._rules[key]["rules"]:
                 lr1_rules.append([key, rule.copy()])
         return lr1_rules, lr1_sign_name, lr1_signs
@@ -339,71 +340,115 @@ class Parser:
         lines = [f"{' ' * tab}{line}" for line in lines]
         return "\n".join(lines)
 
-    def parse(self, tokens: list[tuple]) -> str:
+
+
+    def parse(self, tokens: list[tuple]) -> dict:
         """
         LR(1)解析，使用LR(1)分析表解析tokens
 
-        :param tokens: 词法分析结果(type, token)
-        :return: 解析结果（xml语法树）
+        :param tokens: 词法分析结果 (token_type, token_value, line, column)
+        :return: 解析结果（语法树，字典形式）
         """
         try:
             tokens.append((self._lr1_end, None, None, None))  # 添加结束符
             # 初始化栈
             state_stack = [0]  # 状态栈
             sign_stack = [self._lr1_end]  # 符号栈
-            syntax_stack = []  # 语法树栈
-            
+            syntax_stack = []  # 语法树栈，保存节点字典
+
             index = 0  # tokens索引
-            while 1:
+            while True:
                 state = state_stack[-1]
                 token_type, token_value, line, column = tokens[index]
-                
+
                 # 获取ACTION表项
                 action = self._lr1_table["action"].get((state, token_type))
                 if not action:
-                    raise Exception(f"Syntax error at token {token_value} (type: {token_type})")
-                
+                    raise Exception(f"Syntax error at token {token_value} (type: {token_type}) at line {line}, column {column}")
+
                 action_type, action_value = action
                 if action_type == "shift":
+                    # Shift 操作，读取下一个Token
                     state_stack.append(action_value)
                     sign_stack.append(token_type)
-                    syntax_stack.append(f"<{token_type}>{token_value}</{token_type}>")
+                    # 将Token包装成语法树的叶子节点，压入语法树栈
+                    syntax_stack.append({
+                        'type': token_type,
+                        'value': token_value,
+                        'line': line,
+                        'column': column
+                    })
                     index += 1
                 elif action_type == "reduce":
+                    # Reduce 操作，根据产生式进行规约
                     rule = action_value
                     left, right = rule[0], rule[1]
-                    temp_syntax = ""
+                    child_nodes = []
                     for _ in right:
-                        token = syntax_stack.pop()
-                        if token != "":
-                            temp_syntax = f"{token}\n{temp_syntax}"
+                        # 从语法树栈中弹出子节点
+                        child = syntax_stack.pop()
+                        child_nodes.insert(0, child)
                         state_stack.pop()
                         sign_stack.pop()
-                    # GOTO表项
-                    temp_syntax = temp_syntax.strip("\n\r ")
-                    if self._lr1_sign_name[left] != "":
-                        temp_syntax = Parser.add_tab(temp_syntax)
-                        temp_syntax = f"<{self._lr1_sign_name[left]}>\n{temp_syntax}\n</{self._lr1_sign_name[left]}>"
-                    syntax_stack.append(temp_syntax)
+                    node_type = self._lr1_sign_name.get(left, left)
+                    if node_type == "":
+                        # 如果类型名称为空，将子节点直接添加回语法树栈
+                        syntax_stack.extend(child_nodes)
+                    else:
+                        # 创建新的非终结符节点
+                        node = {
+                            'type': node_type,
+                            'children': child_nodes
+                        }
+                        syntax_stack.append(node)
                     if left == "ENTRY":
                         state_stack.append(0)
                         continue
-                    state_stack.append(self._lr1_table["goto"][(state_stack[-1], left)])
+                    goto_state = self._lr1_table["goto"][(state_stack[-1], left)]
+                    state_stack.append(goto_state)
                     sign_stack.append(left)
                 elif action_type == "accept":
-                    return syntax_stack[0]
+                    # 接受状态，解析完成
+                    if len(syntax_stack) == 1:
+                        return syntax_stack[0]
+                    else:
+                        # 将剩余的节点作为根节点的子节点返回
+                        return {'type': 'ROOT', 'children': syntax_stack}
                 else:
                     raise Exception("Syntax error!")
 
             raise Exception("Unexpected end of input")
         except Exception as e:
-            # 打印已解析的语法树
-            for i in syntax_stack:
-                print(i)
-            raise e
-    
+            # 可选：打印部分语法树栈，帮助调试
+            # for node in syntax_stack:
+            #     print(node)
+            raise e  
 
 if __name__ == "__main__":
+    lexer_instance = lexer.Lexer()
+    parser_instance = Parser()
+
+    # 解析第一个C程序
+    path = r"../in/palindrome.c"
+    with open(path, "r", encoding="utf-8") as file:
+        content = file.read()
+    lexer_instance.tokenize(content, True)
+    tokens = lexer_instance.tokenize_result()
+    syntax_tree = parser_instance.parse(tokens)
+    # 将语法树写入JSON文件
+    with open("out1.json", "w", encoding="utf-8") as f:
+        json.dump(syntax_tree, f, indent=4, ensure_ascii=False)
+
+    # 解析第二个C程序
+    path = r"../in/doubleBubbleSort.c"
+    with open(path, "r", encoding="utf-8") as file:
+        content = file.read()
+    lexer_instance.tokenize(content, True)
+    tokens = lexer_instance.tokenize_result()
+    syntax_tree = parser_instance.parse(tokens)
+    # 将语法树写入JSON文件
+    with open("out2.json", "w", encoding="utf-8") as f:
+        json.dump(syntax_tree, f, indent=4, ensure_ascii=False)
     lexer = lexer.Lexer()
     parser = Parser()
 
@@ -411,20 +456,20 @@ if __name__ == "__main__":
     # tokens = lexer.tokenize_result()
     # syntax = parser.parse(tokens)
     # print(syntax)
-    path = r"in/palindrome.c"
+    path = r"../in/palindrome.c"
     with open(path, "r", encoding="utf-8") as file:
         content = file.read()
     lexer.tokenize(content, True)
     tokens = lexer.tokenize_result()
     syntax = parser.parse(tokens)
-    with open("out1.txt", "w") as f:
-        f.write(syntax)
+    with open("out1.json", "w", encoding="utf-8") as f:
+        json.dump(syntax, f, indent=4, ensure_ascii=False)
 
-    path = r"in/doubleBubbleSort.c"
+    path = r"../in/doubleBubbleSort.c"
     with open(path, "r", encoding="utf-8") as file:
         content = file.read()
     lexer.tokenize(content, True)
     tokens = lexer.tokenize_result()
     syntax = parser.parse(tokens)
-    with open("out2.txt", "w") as f:
-        f.write(syntax)
+    with open("out2.json", "w", encoding="utf-8") as f:
+        json.dump(syntax_tree, f, indent=4, ensure_ascii=False)
