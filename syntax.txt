@@ -1,0 +1,52 @@
+PROGRAM -> OUTER_STMT OUTER_SUB_PROGRAM | OUTER_STMT                          ; 程序的入口点
+OUTER_SUB_PROGRAM -> OUTER_STMT OUTER_SUB_PROGRAM | OUTER_STMT                ; 外部子程序
+OUTER_STMT -> HEADER_STMT | DEFINE_STMT | DECLARE_STMT | FUNCTION_STMT        ; 外部语句
+INNER_SUB_PROGRAM -> INNER_STMT INNER_SUB_PROGRAM | INNER_STMT                ; 内部子程序
+INNER_STMT -> IF_STMT | WHILE_STMT | FOR_STMT | ASSIGN_STMT | DECLARE_STMT |  ; 内部语句
+              VALUE_ITEM semicolon | RETURN_STMT | continue semicolon |
+              break semicolon
+IF_STMT -> if lparen LINER_CODDITION rparen RESULT else RESULT |              ; 条件语句
+           if lparen LINER_CODDITION rparen RESULT
+RESULT -> BLOCK | INNER_STMT                                                  ; 条件或循环的结果块
+DEFINE_STMT -> define identifier VALUE_ITEM                                   ; 宏定义语句
+WHILE_STMT -> while lparen LINER_CODDITION rparen RESULT                      ; while 循环语句
+FOR_STMT -> for lparen FOR_INIT FOR_CONDITION FOR_ASSIGN rparen RESULT |      ; for 循环语句
+            for lparen FOR_INIT FOR_CONDITION rparen RESULT
+FOR_INIT -> ASSIGN_STMT semicolon | DECLARE_STMT semicolon | semicolon        ; for 循环初始化
+FOR_CONDITION -> LINER_CODDITION semicolon | semicolon                        ; for 循环条件
+FOR_ASSIGN -> identifier assign VALUE_ITEM |                                  ; for 循环赋值
+              ARRAY_ITEM assign VALUE_ITEM
+ASSIGN_STMT -> identifier assign VALUE_ITEM semicolon |                       ; 赋值语句
+               ARRAY_ITEM assign VALUE_ITEM semicolon
+DECLARE_STMT -> TYPE identifier semicolon |                                   ; 声明语句
+               TYPE identifier assign VALUE_ITEM semicolon |
+               TYPE ARRAY_ITEM semicolon |
+               TYPE ARRAY_ITEM assign lbrace GROUP_ITEM rbrace
+GROUP_ITEM -> VALUE_ITEM comma GROUP_ITEM | VALUE_ITEM                        ; 组项
+EXPRESSION -> TERM plus EXPRESSION | TERM minus EXPRESSION | TERM             ; 表达式
+TERM -> FACTOR times TERM | FACTOR divide TERM | FACTOR                       ; 项
+FACTOR -> BIT_OP identifier | BIT_OP ARRAY_ITEM | identifier | ARRAY_ITEM |   ; 因子
+          NUMBER | FUNCTION_CALL | lparen EXPRESSION rparen
+ARRAY_ITEM -> identifier lbracket VALUE_ITEM rbracket                         ; 数组项
+FUNCTION_CALL -> identifier lparen GROUP_ITEM rparen |                        ; 函数调用
+                identifier lparen rparen
+VALUE_ITEM -> EXPRESSION | CONSTANT                                           ; 值项
+LINER_CODDITION -> logical_not LINER_CODDITION |                              ; 线性条件
+                  CONDITION logical_and LINER_CODDITION |
+                  CONDITION logical_or LINER_CODDITION |
+                  CONDITION
+CONDITION -> VALUE_ITEM lt VALUE_ITEM | VALUE_ITEM le VALUE_ITEM |            ; 条件
+             VALUE_ITEM gt VALUE_ITEM | VALUE_ITEM ge VALUE_ITEM |
+             VALUE_ITEM eq VALUE_ITEM | VALUE_ITEM neq VALUE_ITEM |
+             VALUE_ITEM
+BLOCK -> lbrace INNER_SUB_PROGRAM rbrace                                      ; 代码块
+FUNCTION_STMT -> TYPE identifier lparen PARAMETER rparen BLOCK |              ; 函数声明语句
+                TYPE identifier lparen rparen BLOCK
+PARAMETER -> TYPE identifier comma PARAMETER | TYPE identifier                ; 参数
+RETURN_STMT -> return VALUE_ITEM semicolon | return semicolon                 ; 返回语句
+
+HEADER_STMT -> include lt header gt                                           ; 头文件语句
+CONSTANT -> string | character                                                ; 常量
+TYPE -> int | float | double | char | void                                    ; 数据类型
+NUMBER -> number | minus number                                               ; 数字
+BIT_OP -> bitwise_and | bitwise_or | bitwise_xor | bitwise_not                ; 位运算符

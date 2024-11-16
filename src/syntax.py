@@ -162,7 +162,7 @@ rules = {
                 "lparen",
                 "FOR_INIT",
                 "FOR_CONDITION",
-                "ASSIGN_STMT",
+                "FOR_ASSIGN",
                 "rparen",
                 "RESULT"
             ],
@@ -201,6 +201,21 @@ rules = {
             ],
             [
                 "semicolon"
+            ]
+        ]
+    },
+    "FOR_ASSIGN": {
+        "name": "FOR_ASSIGN",
+        "rules": [
+            [
+                "identifier",
+                "assign",
+                "VALUE_ITEM"
+            ],
+            [
+                "ARRAY_ITEM",
+                "assign",
+                "VALUE_ITEM"
             ]
         ]
     },
@@ -546,7 +561,7 @@ rules = {
                 "number"
             ]
         ]
-    }
+    },
 }
 
 entry = "PROGRAM"
@@ -585,5 +600,6 @@ helper = {
     "LINER_CODDITION": "线性条件",
     "BIT_OP": "位运算符",
     "NUMBER": "数字",
-    "ARRAY_ITEM": "数组项"
+    "ARRAY_ITEM": "数组项",
+    "FOR_ASSIGN": "for 循环赋值"
 }
