@@ -6,7 +6,6 @@
 *.pyo
 *.pyd
 *.txt
-!syntax.txt
 DS_Store
 tempCodeRunnerFile.*
 
