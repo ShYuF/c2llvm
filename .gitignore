@@ -5,7 +5,6 @@
 *.pyc
 *.pyo
 *.pyd
-*.txt
 DS_Store
 tempCodeRunnerFile.*
 exe/
