@@ -8,5 +8,6 @@
 *.txt
 DS_Store
 tempCodeRunnerFile.*
-
+exe/
+.gitignore
 __pycache__/

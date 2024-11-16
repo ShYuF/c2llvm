@@ -486,9 +486,9 @@ def test_parser():
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
     # 创建输出目录
-    out_dir = f"{BASE_DIR}/../out"
-    if not os.path.exists(out_dir):
-        os.makedirs(out_dir)
+    BASE_DIR = f"{BASE_DIR}/../exe"
+    if not os.path.exists(BASE_DIR):
+        os.makedirs(BASE_DIR)
     # 解析第一个C程序
 
     path = f"{BASE_DIR}/../in/palindrome.c"
@@ -499,7 +499,7 @@ def test_parser():
     syntax_tree = parser_instance.parse(tokens)
 
     # 将语法树写入JSON文件
-    save_as_json(syntax_tree, f"{out_dir}/palindrome.json")
+    save_as_json(syntax_tree, f"{BASE_DIR}/palindrome.json")
 
     # 解析第二个C程序
     path = f"{BASE_DIR}/../in/doubleBubbleSort.c"
@@ -510,7 +510,7 @@ def test_parser():
     syntax_tree = parser_instance.parse(tokens)
 
     # 将语法树写入JSON文件
-    save_as_json(syntax_tree, f"{out_dir}/doubleBubbleSort.json")
+    save_as_json(syntax_tree, f"{BASE_DIR}/doubleBubbleSort.json")
 
 
 if __name__ == "__main__":
