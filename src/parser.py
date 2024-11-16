@@ -484,16 +484,22 @@ def test_parser():
     parser_instance = Parser()
 
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+    # 创建输出目录
+    out_dir = f"{BASE_DIR}/../out"
+    if not os.path.exists(out_dir):
+        os.makedirs(out_dir)
     # 解析第一个C程序
+
     path = f"{BASE_DIR}/../in/palindrome.c"
     with open(path, "r", encoding="utf-8") as file:
         content = file.read()
     lexer_instance.tokenize(content, True)
     tokens = lexer_instance.tokenize_result()
     syntax_tree = parser_instance.parse(tokens)
+
     # 将语法树写入JSON文件
-    with open("palindrome.json", "w", encoding="utf-8") as f:
-        json.dump(syntax_tree, f, indent=4, ensure_ascii=False)
+    save_as_json(syntax_tree, f"{out_dir}/palindrome.json")
 
     # 解析第二个C程序
     path = f"{BASE_DIR}/../in/doubleBubbleSort.c"
@@ -504,8 +510,7 @@ def test_parser():
     syntax_tree = parser_instance.parse(tokens)
 
     # 将语法树写入JSON文件
-    with open("doubleBubbleSort.json", "w", encoding="utf-8") as f:
-        json.dump(syntax_tree, f, indent=4, ensure_ascii=False)
+    save_as_json(syntax_tree, f"{out_dir}/doubleBubbleSort.json")
 
 
 if __name__ == "__main__":
