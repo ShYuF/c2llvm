@@ -384,18 +384,4 @@ class Lexer:
 
 
 if __name__ == "__main__":
-    lexer = Lexer()
-    test_code = """
-#include <stdio.h>
-#include <stdlib.h>
-
-int main() {
-    int integer = -123.456;
-    char _charactor = '\\b';
-    printf("Hello, world!");
-    return 0;
-}
-"""
-    lexer.tokenize(test_code)
-    for token in lexer.tokenize_result():
-        print(token)
+    pass

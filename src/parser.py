@@ -1,9 +1,12 @@
 # /src/parser.py
 
-import os
-import lexer
-import syntax
+import argparse
 import json
+import lexer
+import os
+import syntax
+
+
 class Parser:
     """
     LR(1)语法分析器
@@ -18,14 +21,16 @@ class Parser:
             self._rules = syntax.rules
             self._entry = syntax.entry
             self._lr1_end = syntax.end  # LR(1)文法结束符
-            
+
             # 自检
             state, info = self._self_check()
             if not state:
                 raise Exception(info)
-            
+
             # 求LR(1)拓广文法、符号名称和符号集（Vn ∪ Vt）
-            self._lr1_rules, self._lr1_sign_name, self._lr1_signs = self._cal_lr1_rules()
+            self._lr1_rules, self._lr1_sign_name, self._lr1_signs = (
+                self._cal_lr1_rules()
+            )
 
             # 求LR(1)项目集规范族和GO函数
             self._lr1_clan, self._lr1_go = self._cal_lr1_clan()
@@ -38,6 +43,7 @@ class Parser:
         except Exception as e:
             print(f"Error occurred when initializing parser: {e}")
             exit(1)
+
     def _self_check(self) -> tuple[bool, str]:
         """
         自检
@@ -69,7 +75,7 @@ class Parser:
         求拓广文法
 
         :return: LR(1)规则、LR(1)文法符号名称和LR(1)文法符号集
-        """ 
+        """
         lr1_rules = []  # LR(1)规则，内部元素结构：[产生式左部，产生式右部]
         lr1_sign_name = {}  # LR(1)文法符号名称（非终结符）
         lr1_signs = set()  # LR(1)文法符号集（Vn ∪ Vt）
@@ -82,7 +88,7 @@ class Parser:
             for rule in self._rules[key]["rules"]:
                 for i in rule:
                     lr1_signs.add(i)
-        
+
         lr1_rules.append(["ENTRY", [self._entry]])
         self._entry = "ENTRY"
         for key in self._rules.keys():
@@ -97,6 +103,7 @@ class Parser:
 
         :return: 项目集规范族和GO函数表（不是GOTO表）
         """
+
         # 先求项目集的FIRST集
         def _cal_first(rules: list, sign_name: dict) -> dict:
             """
@@ -127,13 +134,15 @@ class Parser:
 
             # set转换为list
             # for key in _first.keys():
-            #     _first[key] = list(_first[key])                  
+            #     _first[key] = list(_first[key])
             return _first
-        
+
         _first = _cal_first(self._lr1_rules, self._lr1_sign_name)
 
         # 再求项目集的FOLLOW集
-        def _cal_follow(rules: list, sign_name: dict, first: dict, end_sign: str) -> dict:
+        def _cal_follow(
+            rules: list, sign_name: dict, first: dict, end_sign: str
+        ) -> dict:
             """
             求FOLLOW集
             """
@@ -149,7 +158,9 @@ class Parser:
                             before_len = len(_follow[right_signs[i]])
                             # 判断右侧第一个符号是否是非终结符
                             if right_signs[i + 1] in sign_name.keys():
-                                _follow[right_signs[i]] = _follow[right_signs[i]].union(first[right_signs[i + 1]])
+                                _follow[right_signs[i]] = _follow[right_signs[i]].union(
+                                    first[right_signs[i + 1]]
+                                )
                             # 如果是终结符
                             else:
                                 if right_signs[i + 1] not in _follow[right_signs[i]]:
@@ -162,26 +173,33 @@ class Parser:
                     # 处理最后一个符号
                     if right_signs[-1] in sign_name.keys():
                         before_len = len(_follow[right_signs[-1]])
-                        _follow[right_signs[-1]] = _follow[right_signs[-1]].union(_follow[key])
+                        _follow[right_signs[-1]] = _follow[right_signs[-1]].union(
+                            _follow[key]
+                        )
                         after_len = len(_follow[right_signs[-1]])
                         if before_len != after_len:
                             flag = True
-                    
+
                 if not flag:
                     break
-            
+
             # set转换为list
             # for key in _follow.keys():
             #     _follow[key] = list(_follow[key])
             return _follow
-        
-        _follow = _cal_follow(self._lr1_rules, self._lr1_sign_name, _first, self._lr1_end)
+
+        _follow = _cal_follow(
+            self._lr1_rules, self._lr1_sign_name, _first, self._lr1_end
+        )
 
         # 求项目集规范族
-        def _cal_clan(rules: list, sign_name: dict, signs: list, first: dict, follow: dict) -> tuple[list, dict]:
+        def _cal_clan(
+            rules: list, sign_name: dict, signs: list, first: dict, follow: dict
+        ) -> tuple[list, dict]:
             """
             求项目集规范族
             """
+
             def _cal_closure(item_list: list) -> list:
                 """
                 求项目集闭包
@@ -199,7 +217,10 @@ class Parser:
                         outlooks: set = item[3]  # 展望符号集
                         # 如果点的位置在产生式右部的末尾，则跳过
                         # 或者点的位置的符号是终结符，跳过
-                        if dot_index < len(right_signs) and right_signs[dot_index] in sign_name.keys():
+                        if (
+                            dot_index < len(right_signs)
+                            and right_signs[dot_index] in sign_name.keys()
+                        ):
                             # 对于形如 A -> α.Bβ, a 的产生式，将 B -> .γ, b 加入闭包，其中 b ∈ FIRST(βa)
                             # 如果点的位置是产生式右部的最后一个符号，那么 FIRST(βa) = FOLLOW(A)
                             first_beta_a = set()
@@ -212,11 +233,18 @@ class Parser:
                                     first_beta_a.add(next_sign)
                                 # 否则，FIRST(βa) = FIRST(β)
                                 else:
-                                    first_beta_a = first_beta_a.union(first[next_sign].copy())
+                                    first_beta_a = first_beta_a.union(
+                                        first[next_sign].copy()
+                                    )
                             for rule in rules:
                                 # 如果找到的产生式左部等于点右部的第一个符号
                                 if rule[0] == right_signs[dot_index]:
-                                    new_item = [rule[0], rule[1].copy(), 0, first_beta_a.copy()]
+                                    new_item = [
+                                        rule[0],
+                                        rule[1].copy(),
+                                        0,
+                                        first_beta_a.copy(),
+                                    ]
                                     if new_item not in closure:
                                         closure.append(new_item)
                                         flag = True
@@ -243,16 +271,25 @@ class Parser:
                     dot_index: int = item[2]
                     outlooks: set = item[3]
                     if dot_index < len(right_signs) and right_signs[dot_index] == sign:
-                        new_item = [key, right_signs.copy(), dot_index + 1, outlooks.copy()]
+                        new_item = [
+                            key,
+                            right_signs.copy(),
+                            dot_index + 1,
+                            outlooks.copy(),
+                        ]
                         if new_item not in go:
                             go.append(new_item)
                 return _cal_closure(go)
 
             clan = []  # 项目集规范族
-            go_rules: dict = {}  # GO函数的转移规则，内部元素结构：(项目集索引, 符号 ): 转移项目集索引
+            go_rules: dict = (
+                {}
+            )  # GO函数的转移规则，内部元素结构：(项目集索引, 符号 ): 转移项目集索引
 
             # 求初始项目集闭包
-            initial_item_list: list = [[rules[0][0], rules[0][1].copy(), 0, follow['ENTRY'].copy()]]
+            initial_item_list: list = [
+                [rules[0][0], rules[0][1].copy(), 0, follow["ENTRY"].copy()]
+            ]
             initial_closure = _cal_closure(initial_item_list)
             clan.append(initial_closure)
 
@@ -276,8 +313,10 @@ class Parser:
                 index += 1
 
             return clan, go_rules
-        
-        return _cal_clan(self._lr1_rules, self._lr1_sign_name, self._lr1_signs, _first, _follow)       
+
+        return _cal_clan(
+            self._lr1_rules, self._lr1_sign_name, self._lr1_signs, _first, _follow
+        )
 
     def _cal_lr1_table(self) -> dict:
         """
@@ -287,13 +326,13 @@ class Parser:
         """
         # 先构建ACTION表
         action: dict = {}  # ACTION表
-                           # action[(f_state, sign)] = (action_type, action_value)
-                           # action_type: "shift", "reduce", "accept"
-                           # action_value: shift: 移进到的状态；reduce: 规约的产生式；accept: None
+        # action[(f_state, sign)] = (action_type, action_value)
+        # action_type: "shift", "reduce", "accept"
+        # action_value: shift: 移进到的状态；reduce: 规约的产生式；accept: None
         action[(0, self._lr1_end)] = ("accept", None)
         # 再构建GOTO表
         goto: dict = {}  # GOTO表
-                         # goto[(f_state, sign)] = t_state
+        # goto[(f_state, sign)] = t_state
         goto[(0, self._entry)] = 0
 
         for i in range(len(self._lr1_clan)):
@@ -306,11 +345,13 @@ class Parser:
                     for sign in self._lr1_signs:
                         if sign in self._lr1_sign_name.keys():
                             continue
-        
+
                         # 判断[A -> α.xβ , a] ∈ I
-                        if item[1][item[2]] == sign \
-                            and (i, sign) in self._lr1_go.keys():
-                                action[(i, sign)] = ("shift", self._lr1_go[(i, sign)])    
+                        if (
+                            item[1][item[2]] == sign
+                            and (i, sign) in self._lr1_go.keys()
+                        ):
+                            action[(i, sign)] = ("shift", self._lr1_go[(i, sign)])
                 # 再处理规约操作
                 elif item[2] == len(item[1]):
                     # 如果[A -> α. , b] ∈ I
@@ -321,14 +362,14 @@ class Parser:
                         # 再判断规约
                         action[(i, sign)] = ("reduce", item)
                         # print(f"reduce: {i}, {sign}, {item}")
-            
+
             for sign in self._lr1_sign_name.keys():
                 # 如果GO(I, A) = J，且 A 是非终结符
                 if (i, sign) in self._lr1_go.keys():
                     goto[(i, sign)] = self._lr1_go[(i, sign)]
 
         return {"action": action, "goto": goto}
-  
+
     @staticmethod
     def add_tab(string: str, tab: int = 4) -> str:
         """
@@ -339,8 +380,6 @@ class Parser:
         # 添加tab
         lines = [f"{' ' * tab}{line}" for line in lines]
         return "\n".join(lines)
-
-
 
     def parse(self, tokens: list[tuple]) -> dict:
         """
@@ -364,7 +403,9 @@ class Parser:
                 # 获取ACTION表项
                 action = self._lr1_table["action"].get((state, token_type))
                 if not action:
-                    raise Exception(f"Syntax error at token {token_value} (type: {token_type}) at line {line}, column {column}")
+                    raise Exception(
+                        f"Syntax error at token {token_value} (type: {token_type}) at line {line}, column {column}"
+                    )
 
                 action_type, action_value = action
                 if action_type == "shift":
@@ -372,12 +413,14 @@ class Parser:
                     state_stack.append(action_value)
                     sign_stack.append(token_type)
                     # 将Token包装成语法树的叶子节点，压入语法树栈
-                    syntax_stack.append({
-                        'type': token_type,
-                        'value': token_value,
-                        'line': line,
-                        'column': column
-                    })
+                    syntax_stack.append(
+                        {
+                            "type": token_type,
+                            "value": token_value,
+                            "line": line,
+                            "column": column,
+                        }
+                    )
                     index += 1
                 elif action_type == "reduce":
                     # Reduce 操作，根据产生式进行规约
@@ -396,10 +439,7 @@ class Parser:
                         syntax_stack.extend(child_nodes)
                     else:
                         # 创建新的非终结符节点
-                        node = {
-                            'type': node_type,
-                            'children': child_nodes
-                        }
+                        node = {"type": node_type, "children": child_nodes}
                         syntax_stack.append(node)
                     if left == "ENTRY":
                         state_stack.append(0)
@@ -413,7 +453,7 @@ class Parser:
                         return syntax_stack[0]
                     else:
                         # 将剩余的节点作为根节点的子节点返回
-                        return {'type': 'ROOT', 'children': syntax_stack}
+                        return {"type": "ROOT", "children": syntax_stack}
                 else:
                     raise Exception("Syntax error!")
 
@@ -422,54 +462,84 @@ class Parser:
             # 可选：打印部分语法树栈，帮助调试
             # for node in syntax_stack:
             #     print(node)
-            raise e  
+            raise e
 
-if __name__ == "__main__":
+
+def save_as_json(syntax_tree: dict, path: str) -> None:
+    """
+    将语法树保存为JSON文件
+
+    :param syntax_tree: 语法树
+    :param path: JSON文件路径
+    """
+    with open(path, "w", encoding="utf-8") as file:
+        json.dump(syntax_tree, file, indent=4, ensure_ascii=False)
+
+
+def test_parser():
+    """
+    测试语法分析器
+    """
     lexer_instance = lexer.Lexer()
     parser_instance = Parser()
 
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     # 解析第一个C程序
-    path = r"../in/palindrome.c"
+    path = f"{BASE_DIR}/../in/palindrome.c"
     with open(path, "r", encoding="utf-8") as file:
         content = file.read()
     lexer_instance.tokenize(content, True)
     tokens = lexer_instance.tokenize_result()
     syntax_tree = parser_instance.parse(tokens)
     # 将语法树写入JSON文件
-    with open("out1.json", "w", encoding="utf-8") as f:
+    with open("palindrome.json", "w", encoding="utf-8") as f:
         json.dump(syntax_tree, f, indent=4, ensure_ascii=False)
 
     # 解析第二个C程序
-    path = r"../in/doubleBubbleSort.c"
+    path = f"{BASE_DIR}/../in/doubleBubbleSort.c"
     with open(path, "r", encoding="utf-8") as file:
         content = file.read()
     lexer_instance.tokenize(content, True)
     tokens = lexer_instance.tokenize_result()
     syntax_tree = parser_instance.parse(tokens)
+
     # 将语法树写入JSON文件
-    with open("out2.json", "w", encoding="utf-8") as f:
+    with open("doubleBubbleSort.json", "w", encoding="utf-8") as f:
         json.dump(syntax_tree, f, indent=4, ensure_ascii=False)
-    lexer = lexer.Lexer()
-    parser = Parser()
 
-    # lexer.tokenize("int main() { &b; }", True)
-    # tokens = lexer.tokenize_result()
-    # syntax = parser.parse(tokens)
-    # print(syntax)
-    path = r"../in/palindrome.c"
-    with open(path, "r", encoding="utf-8") as file:
-        content = file.read()
-    lexer.tokenize(content, True)
-    tokens = lexer.tokenize_result()
-    syntax = parser.parse(tokens)
-    with open("out1.json", "w", encoding="utf-8") as f:
-        json.dump(syntax, f, indent=4, ensure_ascii=False)
 
-    path = r"../in/doubleBubbleSort.c"
-    with open(path, "r", encoding="utf-8") as file:
-        content = file.read()
-    lexer.tokenize(content, True)
-    tokens = lexer.tokenize_result()
-    syntax = parser.parse(tokens)
-    with open("out2.json", "w", encoding="utf-8") as f:
-        json.dump(syntax_tree, f, indent=4, ensure_ascii=False)
+if __name__ == "__main__":
+    arg_parser = argparse.ArgumentParser(description="Parser")
+    # 两组
+    group = arg_parser.add_mutually_exclusive_group(required=True)
+
+    group.add_argument(
+        "-t", "--test", action="store_true", help="使用样例程序测试语法分析器"
+    )
+
+    group.add_argument("-i", "--input", type=str, help="输入文件路径")
+    arg_parser.add_argument("-o", "--output", type=str, help="输出文件路径")
+
+    args = arg_parser.parse_args()
+    if args.test:
+        test_parser()
+    else:
+        if (
+            not args.input
+            or not os.path.exists(args.input)
+            or not args.input.endswith(".c")
+        ):
+            print("Please input correct file path and output path")
+            exit(1)
+        lexer_instance = lexer.Lexer()
+        parser_instance = Parser()
+        with open(args.input, "r", encoding="utf-8") as file:
+            content = file.read()
+        lexer_instance.tokenize(content, True)
+        tokens = lexer_instance.tokenize_result()
+        syntax_tree = parser_instance.parse(tokens)
+
+        if not args.output:
+            args.output = args.input.replace(".c", ".json")
+        
+        save_as_json(syntax_tree, args.output)
