@@ -1,5 +1,5 @@
 # 保存 C 语法
-
+# /src/syntax.py
 rules = {
     "PROGRAM": {
         "name": "PROGRAM",
