@@ -8,6 +8,8 @@ class IRGenerator:
     def __init__(self) -> None:
         self.module = None
         self.builderInst = None
+        self.contPos = None
+        self.breakPos = None
         pass
 
     def findFirstChild(self, tree: dict, name: str):
@@ -73,6 +75,7 @@ class IRGenerator:
 
     def getGroupItems(self, tree: dict, syms: dict):
         assert tree["type"] == "GROUP_ITEM"
+        # print("get", tree)
         chs = tree["children"]
         if len(chs) == 1:
             return [self.codeGen(chs[0], syms)]
@@ -96,7 +99,27 @@ class IRGenerator:
     def codeGen(self, tree: dict, syms: dict):
         # print(tree["type"], ": builder =", builder)
         t = tree["type"]
+        if "00useless" in syms:
+            return None
         if "value" in tree:
+            if t == "continue":
+                builder = self.builder()
+                if self.contPos == None:
+                    raise RuntimeError("use of continue outside of any loops at line %d, column %d)" % (tree["line"], tree["column"]))
+                else:
+                    uselessBlock = builder.append_basic_block("useless")
+                    builder.branch(self.contPos)
+                    self.setBuilder(ir.IRBuilder(uselessBlock))
+                    syms["00useless"] = uselessBlock
+            elif t == "break":
+                builder = self.builder()
+                if self.breakPos == None:
+                    raise RuntimeError("use of break outside of any loops at line %d, column %d)" % (tree["line"], tree["column"]))
+                else:
+                    uselessBlock = builder.append_basic_block("useless")
+                    builder.branch(self.breakPos)
+                    self.setBuilder(ir.IRBuilder(uselessBlock))
+                    syms["00useless"] = uselessBlock
             # non-terminals
             return None
         chs = tree["children"]
@@ -120,7 +143,6 @@ class IRGenerator:
                 ptr = newBuilder.alloca(params[i][0])
                 newBuilder.store(arg, ptr)
                 newSyms[params[i][1]] = ptr
-            # TODO add func.args to newSyms
             self.setBuilder(newBuilder)
             self.codeGen(chs[-1], newSyms)
             self.setBuilder(None)
@@ -144,23 +166,49 @@ class IRGenerator:
             cond = self.codeGen(chs[2], syms)
             if len(chs) == 7:
                 # ::= if lparen LINER_CODDITION rparen RESULT else RESULT
-                with builder.if_else(cond) as (then, otherwise):
-                    with then:
-                        self.setBuilder(builder)
-                        thenSyms = syms.copy()
-                        self.codeGen(chs[4], thenSyms)
-                    with otherwise:
-                        self.setBuilder(builder)
-                        elseSyms = syms.copy()
-                        self.codeGen(chs[6], elseSyms)
-                self.setBuilder(builder)
+                thenBlock = builder.append_basic_block("if.then")
+                thenBuilder = ir.IRBuilder(thenBlock)
+                elseBlock = thenBuilder.append_basic_block("if.else")
+                elseBuilder = ir.IRBuilder(elseBlock)
+                endBlock = elseBuilder.append_basic_block("endif")
+
+                builder.cbranch(cond, thenBlock, elseBlock)
+
+                self.setBuilder(thenBuilder)
+                thenSyms = syms.copy()
+                self.codeGen(chs[4], thenSyms)
+                if "00useless" in thenSyms:
+                    self.builder().branch(thenSyms["00useless"])
+                else:
+                    self.builder().branch(endBlock)
+
+                self.setBuilder(elseBuilder)
+                elseSyms = syms.copy()
+                self.codeGen(chs[4], elseSyms)
+                if "00useless" in elseSyms:
+                    self.builder().branch(elseSyms["00useless"])
+                else:
+                    self.builder().branch(endBlock)
+
+                self.setBuilder(ir.IRBuilder(endBlock))
+
             else:
                 # ::= if lparen LINER_CODDITION rparen RESULT
-                with builder.if_then(cond):
-                    self.setBuilder(builder)
-                    thenSyms = syms.copy()
-                    self.codeGen(chs[4], thenSyms)
-                self.setBuilder(builder)
+                thenBlock = builder.append_basic_block("if.then")
+                thenBuilder = ir.IRBuilder(thenBlock)
+                endBlock = thenBuilder.append_basic_block("endif")
+
+                builder.cbranch(cond, thenBlock, endBlock)
+
+                self.setBuilder(thenBuilder)
+                thenSyms = syms.copy()
+                self.codeGen(chs[4], thenSyms)
+                if "00useless" in thenSyms:
+                    self.builder().branch(thenSyms["00useless"])
+                else:
+                    self.builder().branch(endBlock)
+
+                self.setBuilder(ir.IRBuilder(endBlock))
             return None
         elif t == "WHILE_STMT":
             # WHILE_STMT ::= while lparen LINER_CODDITION rparen RESULT
@@ -172,6 +220,9 @@ class IRGenerator:
             contBlock = bodyBuilder.append_basic_block("exit")
             contBuilder = ir.IRBuilder(contBlock)
 
+            oldContPos = self.contPos
+            oldBreakPos = self.breakPos
+
             oldBuilder.branch(condBlock) # needed?
 
             self.setBuilder(condBuilder)
@@ -180,38 +231,65 @@ class IRGenerator:
 
             self.setBuilder(bodyBuilder)
             newSyms = syms.copy()
+            self.contPos = condBlock
+            self.breakPos = contBlock
             self.codeGen(chs[4], newSyms)
-            bodyBuilder.branch(condBlock)
+            if "00useless" in newSyms:
+                self.builder().branch(newSyms["00useless"])
+            else:
+                self.builder().branch(condBlock)
+            self.contPos = oldContPos
+            self.breakPos = oldBreakPos
 
             self.setBuilder(contBuilder)
         elif t == "FOR_STMT":
 # FOR_STMT -> for lparen FOR_INIT FOR_CONDITION FOR_ASSIGN rparen RESULT |      ; for 循环语句
 #             for lparen FOR_INIT FOR_CONDITION rparen RESULT
-            raise RuntimeError("FOR_STMT: TODO")
             oldBuilder = self.builder()
             initBlock = oldBuilder.append_basic_block("for_init")
             initBuilder = ir.IRBuilder(initBlock)
-            condBlock = oldBuilder.append_basic_block("for_cond")
+            condBlock = initBuilder.append_basic_block("for_cond")
             condBuilder = ir.IRBuilder(condBlock)
-            bodyBlock = condBuilder.append_basic_block("body")
+            bodyBlock = condBuilder.append_basic_block("for_body")
             bodyBuilder = ir.IRBuilder(bodyBlock)
-            contBlock = bodyBuilder.append_back_block("exit")
+            stepBlock = bodyBuilder.append_basic_block("for_step")
+            stepBuilder = ir.IRBuilder(stepBlock)
+            contBlock = stepBuilder.append_basic_block("exit")
             contBuilder = ir.IRBuilder(contBlock)
 
+            oldContPos = self.contPos
+            oldBreakPos = self.breakPos
+
             newSyms = syms.copy()
-            oldBuilder.branch(condBlock) # needed?
+            oldBuilder.branch(initBlock) # needed?
+
+            self.setBuilder(initBuilder)
+            self.codeGen(chs[2], newSyms)
+            initBuilder.branch(condBlock)
 
             self.setBuilder(condBuilder)
-            cond = self.codeGen(chs[2], syms)
+            cond = self.codeGen(chs[3], newSyms)
             condBuilder.cbranch(cond, bodyBlock, contBlock)
 
             self.setBuilder(bodyBuilder)
-            newSyms = syms.copy()
-            self.codeGen(chs[4], newSyms)
-            bodyBuilder.branch(condBlock)
+            bodySyms = newSyms.copy()
+            self.contPos = stepBlock
+            self.breakPos = contBlock
+            self.codeGen(chs[-1], bodySyms)
+            if "00useless" in bodySyms:
+                self.builder().branch(bodySyms["00useless"])
+            else:
+                self.builder().branch(stepBlock)
+            self.contPos = oldContPos
+            self.breakPos = oldBreakPos
+
+            self.setBuilder(stepBuilder)
+            if len(chs) == 7:
+                self.codeGen(chs[4], newSyms)
+            stepBuilder.branch(condBlock)
 
             self.setBuilder(contBuilder)
-        elif t == "ASSIGN_STMT":
+        elif t == "ASSIGN_STMT" or t == "FOR_ASSIGN":
             if chs[0]["type"] == "identifier":
                 # ::= identifier assign VALUE_ITEM semicolon
                 ptr = self.getIdentifier(chs[0], syms)
@@ -219,7 +297,12 @@ class IRGenerator:
                 self.assign(val, ptr)
 
                 return self.builder().load(ptr)
+            elif chs[0]["type"] == "ARRAY_ITEM":
+                ptr = self.codeGen(chs[0], syms)
+                val = self.codeGen(chs[2], syms)
+                self.assign(val, ptr)
 
+                return self.builder().load(ptr)
                 # ::= ARRAY_ITEM assign VALUE_ITEM semicolon
             raise RuntimeError("\"ASSIGN_STMT\": TODO")
         elif t == "DECLARE_STMT":
@@ -242,18 +325,18 @@ class IRGenerator:
                     val = self.codeGen(chs[3], syms)
                     self.assign(val, ptr)
                     syms[name] = ptr
-                elif len(chs) == 3 and chs[1]["type"] == "ARRAY_ITEM":
-                    # ::= TYPE ARRAY_ITEM semicolon
+                elif len(chs) == 3 and chs[1]["type"] == "DEC_ARRAY_ITEM":
+                    # ::= TYPE DEC_ARRAY_ITEM semicolon
                     # ARRAY_ITEM ::= identifier lbracket VALUE_ITEM rbracket
                     cchs = chs[1]["children"]
                     name = cchs[0]["value"]
                     if name in syms:
                         raise RuntimeError("identifier \"%s\" (at line %d, column %d) is already defined" % (name, cchs[0]["line"], cchs[0]["column"]))
-                    ptr = builder.alloca(ir.ArrayType(self.getType(chs[0]["children"][0]), 1000))
+                    ptr = builder.alloca(ir.ArrayType(self.getType(chs[0]["children"][0]), int(cchs[2]["value"])))
                     # ptr = builder.alloca(self.getType(chs[0]["children"][0]), 1000, name = name)
                     syms[name] = ptr
-                elif len(chs) == 6 and chs[1]["type"] == "ARRAY_ITEM":
-                    # TYPE ARRAY_ITEM assign lbrace GROUP_ITEM rbrace
+                elif len(chs) == 6 and chs[1]["type"] == "DEC_ARRAY_ITEM":
+                    # TYPE DEC_ARRAY_ITEM assign lbrace GROUP_ITEM rbrace
                     raise RuntimeError("not implemented")
                 else:
                     raise RuntimeError("DECLARE_STMT: impossible branch")
@@ -272,10 +355,6 @@ class IRGenerator:
                 return
         elif t == "VALUE_ITEM":
             return self.codeGen(chs[0], syms)
-        elif t == "continue":
-            raise RuntimeError("\"continue\": TODO")
-        elif t == "break":
-            raise RuntimeError("\"break\": TODO")
         elif t == "EXPRESSION":
             # print("tree =", tree)
             if len(chs) == 1:
@@ -295,7 +374,7 @@ class IRGenerator:
                 raise RuntimeError("EXPRESSION: impossible branch")
         elif t == "TERM":
             if len(chs) == 1:
-                # TERM ::= FACTOR
+                # TERM ::= TERM_BIT
                 return self.codeGen(chs[0], syms)
             elif chs[1]["type"] == "times":
                 builder = self.builder()
@@ -309,13 +388,28 @@ class IRGenerator:
                 return builder.sdiv(lhs, rhs)
             else:
                 raise RuntimeError("TERM: impossible branch")
+        elif t == "TERM_BIT":
+            if len(chs) == 1:
+                return self.codeGen(chs[0], syms)
+            else:
+                lhs = self.codeGen(chs[0], syms)
+                rhs = self.codeGen(chs[2], syms)
+                op = chs[1]["type"]
+                if op == "bitwise_and":
+                    return self.builder().and_(lhs, rhs)
+                elif op == "bitwise_or":
+                    return self.builder().or_(lhs, rhs)
+                elif op == "bitwise_xor":
+                    return self.builder().xor(lhs, rhs)
+                else:
+                    raise RuntimeError("TERM_BIT: impossible branch")
         elif t == "FACTOR":
             if chs[0]["type"] == "NUMBER":
                 return self.codeGen(chs[0], syms)
             elif chs[0]["type"] == "FUNCTION_CALL":
                 return self.codeGen(chs[0], syms)
-            elif chs[0]["type"] == "BIT_OP" and chs[1]["type"] == "identifier":
-                # FACTOR ::= BIT_OP identifier
+            elif chs[0]["type"] == "BIT_OP_O" and chs[1]["type"] == "identifier":
+                # FACTOR ::= BIT_OP_O identifier
                 bitOp = chs[0]["children"][0]["type"]
                 operand = self.getIdentifier(chs[1], syms)
                 if bitOp == "bitwise_and":
@@ -330,6 +424,9 @@ class IRGenerator:
                     return operand
                 else:
                     return builder.load(operand)
+            elif chs[0]["type"] == "BIT_OP_O" and chs[1]["type"] == "ARRAY_ITEM":
+                ptr = self.codeGen(chs[1], syms)
+                return ptr
             elif chs[0]["type"] == "ARRAY_ITEM":
                 ptr = self.codeGen(chs[0], syms)
                 return self.builder().load(ptr)
@@ -392,6 +489,11 @@ class IRGenerator:
                 raise RuntimeException("CONSTANT: impossible branch")
         elif t == "TYPE":
             return self.getType(chs[0])
+        elif t == "FOR_CONDITION":
+            if len(chs) == 1:
+                return ir.Constant(ir.IntType(1), 1)
+            else:
+                return self.codeGen(chs[0], syms)
         elif t == "LINER_CODDITION": # CONDITION!!!
             if len(chs) == 2:
                 # ::= logical_not LINER_CODDITION

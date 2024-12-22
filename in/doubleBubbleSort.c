@@ -11,7 +11,8 @@ int main() {
     while (1) {
         scanf("%d", &arr[n]);
         n = n + 1;
-        c = getchar();
+        scanf("%c", &c);
+        // c = getchar();
         if (c != ',') {
             break;
         }
