@@ -253,12 +253,12 @@ rules = {
             ],           
             [
                 "TYPE",
-                "ARRAY_ITEM",
+                "DEC_ARRAY_ITEM",
                 "semicolon"
             ],
             [
                 "TYPE",
-                "ARRAY_ITEM",
+                "DEC_ARRAY_ITEM",
                 "assign",
                 "lbrace",
                 "GROUP_ITEM",
@@ -332,29 +332,42 @@ rules = {
         "name": "TERM",
         "rules": [
             [
-                "FACTOR",
+                "TERM_BIT",
                 "times",
                 "TERM"
             ],
             [
-                "FACTOR",
+                "TERM_BIT",
                 "divide",
                 "TERM"
+            ],
+            [
+                "TERM_BIT"
+            ]
+        ]
+    },
+    "TERM_BIT": {
+        "name": "",
+        "rules": [
+            [
+                "FACTOR",
+                "BIT_OP_T",
+                "TERM_BIT"
             ],
             [
                 "FACTOR"
             ]
         ]
-    },      
+    },
     "FACTOR": {
         "name": "FACTOR",
         "rules": [
             [
-                "BIT_OP",
+                "BIT_OP_O",
                 "identifier"
             ],
             [
-                "BIT_OP",
+                "BIT_OP_O",
                 "ARRAY_ITEM"
             ],
             [
@@ -373,6 +386,17 @@ rules = {
                 "lparen",
                 "EXPRESSION",
                 "rparen"
+            ]
+        ]
+    },
+    "DEC_ARRAY_ITEM": {
+        "name": "",
+        "rules": [
+            [
+                "identifier",
+                "lbracket",
+                "number",
+                "rbracket"
             ]
         ]
     },
@@ -414,7 +438,18 @@ rules = {
             ],
         ]
     },
-    "BIT_OP": {
+    "BIT_OP_O": {
+        "name": "",
+        "rules": [
+            [
+                "bitwise_and"
+            ],
+            [
+                "bitwise_not"
+            ],
+        ]
+    },
+    "BIT_OP_T": {
         "name": "",
         "rules": [
             [
@@ -425,9 +460,6 @@ rules = {
             ],
             [
                 "bitwise_xor"
-            ],
-            [
-                "bitwise_not"
             ],
         ]
     },
@@ -589,6 +621,7 @@ helper = {
     "TYPE": "数据类型",
     "EXPRESSION": "表达式",
     "TERM": "项",
+    "TERM_BIT": "位运算项",
     "FACTOR": "因子",
     "FUNCTION_CALL": "函数调用",
     "VALUE_ITEM": "值项",
@@ -598,8 +631,10 @@ helper = {
     "PARAMETER": "参数",
     "RETURN_STMT": "返回语句",
     "LINER_CODDITION": "线性条件",
-    "BIT_OP": "位运算符",
+    "BIT_OP_O": "位运算符（一元）",
+    "BIT_OP_T": "位运算符（二元）",
     "NUMBER": "数字",
     "ARRAY_ITEM": "数组项",
+    "DEC_ARRAY_ITEM": "声明数组项",
     "FOR_ASSIGN": "for 循环赋值"
 }
