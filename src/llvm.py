@@ -15,43 +15,67 @@ class IRGenerator:
                 return child
         return None
 
-    def funcBodyGen(self, tree: dict, builder: ir.IRBuilder, args):
-        t = tree["type"]
-        if "value" in tree:
-            # non-terminals
-            return
-        chs = tree["children"]
-        if t == "RETURN_STMT":
-            val = self.findFirstChild(tree, "VALUE_ITEM")
-            if val == None:
-                # 无返回值，函数返回值应为 void
-                builder.ret_void()
-                return
-            else:
-                data = self.codeGen(val)
-                builder.ret(data)
-                return
+    def getType(self, typeItem: dict):
+        val = typeItem["value"]
+        if val == "int":
+            return ir.IntType(32)
+        elif val == "float":
+            return ir.FloatType()
+        elif val == "double":
+            return ir.DoubleType()
+        elif val == "char":
+            return ir.IntType(8)
+        elif val == "void":
+            return ir.VoidType()
         else:
-            for ch in chs:
-                self.funcBodyGen(ch, builder, args)
+            raise RuntimeError("invalid type \"%s\" at line %d, col %d" % (val, typeItem["line"], typeItem["column"]))
 
-    def codeGen(self, tree: dict):
+    def getGroupItems(self, tree: dict, syms: dict, builder = None):
+        assert tree["type"] == "GROUP_ITEM"
+        chs = tree["children"]
+        if len(chs) == 1:
+            return [self.codeGen(chs[0], syms, builder = builder)]
+        else:
+            return [self.codeGen(chs[0], syms, builder = builder)] + self.getGroupItems(chs[2], syms, builder = builder)
+
+    def getIdentifier(self, node: dict, syms: dict):
+        name = node["value"]
+        if name not in syms:
+            raise RuntimeError("identifier \"%s\" not found at line %d, column %d" % (name, node["line"], node["column"]))
+        return syms[name]
+
+    def codeGen(self, tree: dict, syms: dict, builder = None):
+        # print(tree["type"], ": builder =", builder)
         t = tree["type"]
         if "value" in tree:
             # non-terminals
             return None
         chs = tree["children"]
-        if t == "DECLARE_STMT":
-            pass
-        elif t == "FUNCTION_STMT":
-            retType = self.codeGen(chs[0])
+        if t == "FUNCTION_STMT":
+            assert builder == None
+            retType = self.codeGen(chs[0], syms)
             name = chs[1]["value"]
             func = ir.Function(self.module, ir.FunctionType(ir.IntType(32), ()), name = name)
             block = func.append_basic_block(name = "body")
-            builder = ir.IRBuilder(block)
-            self.funcBodyGen(chs[-1], builder, func.args)
+            newBuilder = ir.IRBuilder(block)
+            newSyms = syms.copy()
+            # TODO add func.args to newSyms
+            self.codeGen(chs[-1], newSyms, builder = newBuilder)
         elif t == "HEADER_STMT":
-            pass
+            header = chs[2]["value"]
+            if header == "stdio.h":
+                # define prototypes for scanf and printf (for simplicity)
+                # ir.Function(self.module, ir.FunctionType(ir.IntType(32), (ir.PointerType(ir.IntType(8))), var_arg = True), name = "scanf")
+                # ir.Function(self.module, ir.FunctionType(ir.IntType(32), (ir.PointerType(ir.IntType(8))), var_arg = True), name = "printf")
+                if "scanf" in syms:
+                    raise RuntimeError("\"scanf\" redefined")
+                if "printf" in syms:
+                    raise RuntimeError("\"printf\" redefined")
+                syms["scanf"] = ir.Function(self.module, ir.FunctionType(ir.IntType(32), (ir.PointerType(ir.IntType(8)),), var_arg = True), name = "scanf")
+                syms["printf"] = ir.Function(self.module, ir.FunctionType(ir.IntType(32), (ir.PointerType(ir.IntType(8)),), var_arg = True), name = "printf")
+            else:
+                # other headers not allowed
+                raise RuntimeError("header not found: \"%s\"" % header)
         elif t == "IF_STMT":
             pass
         elif t == "WHILE_STMT":
@@ -61,11 +85,28 @@ class IRGenerator:
         elif t == "ASSIGN_STMT":
             pass
         elif t == "DECLARE_STMT":
-            pass
+            if builder != None:
+                # local variable declaration
+                if len(chs) == 3:
+                    name = chs[1]["value"]
+                    if name in syms:
+                        raise RuntimeError("identifier \"%s\" is already defined at line %d, column %d" % (name, chs[1]["line"], chs[1]["column"]))
+                    ptr = builder.alloca(self.getType(chs[0]["children"][0]), name = name)
+                    syms[name] = ptr
+                else:
+                    pass
         elif t == "RETURN_STMT":
-            pass
+            val = self.findFirstChild(tree, "VALUE_ITEM")
+            if val == None:
+                # 无返回值，函数返回值应为 void
+                builder.ret_void()
+                return
+            else:
+                data = self.codeGen(val, syms, builder = builder)
+                builder.ret(data)
+                return
         elif t == "VALUE_ITEM":
-            return self.codeGen(chs[0])
+            return self.codeGen(chs[0], syms, builder = builder)
         elif t == "continue":
             pass
         elif t == "break":
@@ -73,26 +114,46 @@ class IRGenerator:
         elif t == "EXPRESSION":
             if len(chs) == 1:
                 # EXPRESSION ::= TREM
-                return self.codeGen(chs[0])
-            elif chs[1]["value"] == "plus":
-                pass
-            elif chs[1]["value"] == "minus":
+                return self.codeGen(chs[0], syms, builder = builder)
+            elif chs[1]["type"] == "plus":
+                if builder == None:
+                    raise RuntimeError("operation not supported outside function body!")
+                lhs = self.codeGen(chs[0], syms, builder = builder)
+                rhs = self.codeGen(chs[2], syms, builder = builder)
+                return builder.add(lhs, rhs)
+            elif chs[1]["type"] == "minus":
                 pass
             else:
                 raise RuntimeError("EXPRESSION: impossible branch")
         elif t == "TERM":
             if len(chs) == 1:
                 # TERM ::= FACTOR
-                return self.codeGen(chs[0])
-            elif chs[1]["value"] == "times":
+                return self.codeGen(chs[0], syms, builder = builder)
+            elif chs[1]["type"] == "times":
                 pass
-            elif chs[1]["value"] == "divide":
+            elif chs[1]["type"] == "divide":
                 pass
             else:
                 raise RuntimeError("TERM: impossible branch")
         elif t == "FACTOR":
             if chs[0]["type"] == "NUMBER":
-                return self.codeGen(chs[0])
+                return self.codeGen(chs[0], syms, builder = builder)
+            elif chs[0]["type"] == "FUNCTION_CALL":
+                return self.codeGen(chs[0], syms, builder = builder)
+            elif chs[0]["type"] == "BIT_OP" and chs[1]["type"] == "identifier":
+                # FACTOR ::= BIT_OP identifier
+                bitOp = chs[0]["children"][0]["type"]
+                operand = self.getIdentifier(chs[1], syms)
+                if bitOp == "bitwise_and":
+                    # address op
+                    return operand
+                else:
+                    raise RuntimeError("FACTOR BIT_OP: impossible branch")
+            elif chs[0]["type"] == "identifier":
+                if builder == None:
+                    raise RuntimeError("operation not allowed outside function body")
+                operand = self.getIdentifier(chs[0], syms)
+                return builder.load(operand)
             else:
                 raise RuntimeError("FACTOR: impossible branch")
         elif t == "NUMBER":
@@ -109,30 +170,49 @@ class IRGenerator:
                 pass
             else:
                 raise RuntimeError("NUMBER: impossible branch")
-        elif t == "TYPE":
-            val = chs[0]["value"]
-            if val == "int":
-                return ir.IntType(32)
-            elif val == "float":
-                return ir.FloatType()
-            elif val == "double":
-                return ir.DoubleType()
-            elif val == "char":
-                return ir.IntType(8)
-            elif val == "void":
-                return ir.VoidType()
+        elif t == "FUNCTION_CALL":
+            if builder == None:
+                raise RuntimeError("global function call is temporarily not allowed")
             else:
-                raise RuntimeError("invalid type \"%s\" at line %d, col %d" % (val, chs[0]["line"], chs[0]["column"]))
+                funcName = chs[0]["value"]
+                if len(chs) == 4:
+                    args = self.getGroupItems(chs[2], syms, builder = builder)
+                    for i, arg in enumerate(args):
+                        # print(arg.type, isinstance(arg.type, ir.PointerType))
+                        if isinstance(arg.type, ir.PointerType) and isinstance(arg.type.pointee, ir.ArrayType):
+                            # 如果是一个数组名
+                            args[i] = builder.bitcast(arg, ir.PointerType(arg.type.pointee.element))
+                        # elif isinstance(arg, ir.GlobalVariable) and 
+                if funcName not in syms:
+                    raise RuntimeError("function \"%s\" not found at line %d, column %d" % (funcName, chs[0]["line"], chs[0]["column"]))
+                else:
+                    builder.call(syms[funcName], args)
+        elif t == "CONSTANT":
+            if chs[0]["type"] == "string":
+                val = eval(chs[0]["value"]) + "\0"
+                tmpName = self.module.get_unique_name()
+                ptr = ir.GlobalVariable(self.module, ir.ArrayType(ir.IntType(8), len(val)), tmpName)
+                ptr.global_constant = True
+                ptr.unnamed_addr = True
+                ptr.initializer = ir.Constant(ir.ArrayType(ir.IntType(8), len(val)), bytearray(val.encode("utf-8")))
+                return ptr
+                # return ir.Constant(ir.ArrayType(ir.IntType(8), len(val)), val)
+            elif chs[0]["type"] == "character":
+                pass
+            else:
+                raise RuntimeException("CONSTANT: impossible branch")
+        elif t == "TYPE":
+            return self.getType(chs[0])
         else:
             ret = None
             for ch in chs:
-                ret = self.codeGen(ch)
+                ret = self.codeGen(ch, syms, builder = builder)
             return ret
 
 
     def generate(self, tree: dict) -> ir.Module:
         self.module = ir.Module(name = "undefined")
-        self.codeGen(tree)
+        self.codeGen(tree, {})
         # # Create some useful types
         # double = ir.DoubleType()
         # fnty = ir.FunctionType(double, (double, double))
