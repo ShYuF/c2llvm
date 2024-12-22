@@ -83,19 +83,19 @@ class Lexer:
         }
 
         self._punctuators = {
+            "++": "plusplus",
+            "--": "minusminus",
             "+": "plus",
             "-": "minus",
             "*": "times",
             "/": "divide",
             "%": "percent",
-            "++": "plusplus",
-            "--": "minusminus",
             "==": "eq",
             "!=": "neq",
-            ">": "gt",
-            "<": "lt",
             ">=": "ge",
             "<=": "le",
+            ">": "gt",
+            "<": "lt",
             "&&": "logical_and",
             "||": "logical_or",
             "!": "logical_not",
