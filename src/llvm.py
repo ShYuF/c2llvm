@@ -44,9 +44,11 @@ class IRGenerator:
     def setBuilder(self, newBuilder):
         self.builderInst = newBuilder
 
-    def assign(self, val, ptr):
+    def assign(self, val, ptr, chs):
+        # print("call::assign()")
         builder = self.builder()
         tar = ptr.type.pointee
+        # print(tar, val.type)
         if tar == val.type:
             builder.store(val, ptr)
         elif isinstance(tar, ir.IntType):
@@ -134,7 +136,7 @@ class IRGenerator:
                 params = self.getParameters(chs[3])
             else:
                 params = []
-            func = ir.Function(self.module, ir.FunctionType(ir.IntType(32), (t for t, _ in params)), name = name)
+            func = ir.Function(self.module, ir.FunctionType(retType, (t for t, _ in params)), name = name)
             syms[name] = func
             block = func.append_basic_block(name = "body")
             newBuilder = ir.IRBuilder(block)
@@ -184,7 +186,7 @@ class IRGenerator:
 
                 self.setBuilder(elseBuilder)
                 elseSyms = syms.copy()
-                self.codeGen(chs[4], elseSyms)
+                self.codeGen(chs[6], elseSyms)
                 if "00useless" in elseSyms:
                     self.builder().branch(elseSyms["00useless"])
                 else:
@@ -294,13 +296,13 @@ class IRGenerator:
                 # ::= identifier assign VALUE_ITEM semicolon
                 ptr = self.getIdentifier(chs[0], syms)
                 val = self.codeGen(chs[2], syms)
-                self.assign(val, ptr)
+                self.assign(val, ptr, chs)
 
                 return self.builder().load(ptr)
             elif chs[0]["type"] == "ARRAY_ITEM":
                 ptr = self.codeGen(chs[0], syms)
                 val = self.codeGen(chs[2], syms)
-                self.assign(val, ptr)
+                self.assign(val, ptr, chs)
 
                 return self.builder().load(ptr)
                 # ::= ARRAY_ITEM assign VALUE_ITEM semicolon
@@ -323,7 +325,7 @@ class IRGenerator:
                         raise RuntimeError("identifier \"%s\" (at line %d, column %d) is already defined" % (name, chs[1]["line"], chs[1]["column"]))
                     ptr = builder.alloca(self.getType(chs[0]["children"][0]), name = name)
                     val = self.codeGen(chs[3], syms)
-                    self.assign(val, ptr)
+                    self.assign(val, ptr, chs)
                     syms[name] = ptr
                 elif len(chs) == 3 and chs[1]["type"] == "DEC_ARRAY_ITEM":
                     # ::= TYPE DEC_ARRAY_ITEM semicolon
@@ -449,6 +451,7 @@ class IRGenerator:
             else:
                 raise RuntimeError("NUMBER: impossible branch")
         elif t == "FUNCTION_CALL":
+            # print("FUNCTION_CALL", chs)
             if self.builderInst == None:
                 raise RuntimeError("global function call is temporarily not allowed")
             else:
@@ -475,6 +478,7 @@ class IRGenerator:
         elif t == "CONSTANT":
             if chs[0]["type"] == "string":
                 val = eval(chs[0]["value"]) + "\0"
+                # print("val =", val, chs[0]["line"], chs[0]["column"])
                 tmpName = self.module.get_unique_name()
                 ptr = ir.GlobalVariable(self.module, ir.ArrayType(ir.IntType(8), len(val)), tmpName)
                 ptr.global_constant = True
